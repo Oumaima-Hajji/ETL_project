@@ -13,4 +13,4 @@ venv
 airflow_settings.yaml
 
 packages.txt
-images
+
