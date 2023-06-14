@@ -4,7 +4,7 @@
 
 Overall architecture :
 
-![Alt text](images/dag_archit.jpeg)
+![Alt text2](images/dag_archit.jpeg)
 
 
 Overview
