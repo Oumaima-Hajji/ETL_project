@@ -15,7 +15,7 @@ And then we visualize the data using Looker.
 
 Overall architecture :
 
-![Alt text2](images/dag_archit.jpeg)
+![Alt text2](images/dag_architecture.jpg)
 
 Project Contents
 ================
