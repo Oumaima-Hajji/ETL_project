@@ -3,7 +3,7 @@
 ![Alt text](images/dags.jpeg)
 
 
-![Alt text](images/dag_arch.png)
+![Alt text](images/dag_archit.jpeg)
 
 
 Overview
