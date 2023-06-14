@@ -2,6 +2,7 @@
 
 ![Alt text](images/dags.jpeg)
 
+Overall architecture :
 
 ![Alt text](images/dag_archit.jpeg)
 
