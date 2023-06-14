@@ -17,6 +17,10 @@ Overall architecture :
 
 ![Alt text2](images/dag_architecture.jpg)
 
+My resulting Dashboard in Looker :
+
+![Alt text3](images/Dashboard.jpeg)
+
 Project Contents
 ================
 
