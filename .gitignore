@@ -4,7 +4,7 @@
 airflow_settings.yaml
 __pycache__/
 astro
-plugins
+/plugins/
 /plugins/credentials.json
 .astro
 

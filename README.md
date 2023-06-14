@@ -1,6 +1,6 @@
 # Daily Weather data ETL pipeline scheduling using Airflow
 
-![Alt text](images/dags.jpeg)
+![Alt text](images/dagidem.jpeg)
 
 
 
@@ -31,14 +31,18 @@ My project contains a "dags" folder :
         
         The architecture of the DAG is as follows :
 
-        - Begin : EmptyOperator 
+        - Begin : `EmptyOperator` 
 
-        - data_to_gcs : PythonOperator
+        - data_to_gcs : `PythonOperator`
 
-        - create_dataset : BigQueryCreateEmptyDatasetOperator
+        - create_dataset : `BigQueryCreateEmptyDatasetOperator`
 
-        - gcs_to_bigquery_operator :  GCSToBigQueryOperator
+        - check_if_data_already_exist : `BranchPythonOperator`
 
-        - End : EmptyOperator
+        - gcs_to_bigquery_operator :  `GCSToBigQueryOperator`
+
+        - skipping : `EmptyOperator`
+
+        - End : `EmptyOperator`
 
 
