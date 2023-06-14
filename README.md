@@ -2,9 +2,7 @@
 
 ![Alt text](images/dags.jpeg)
 
-Overall architecture :
 
-![Alt text2](images/dag_archit.jpeg)
 
 
 Overview
@@ -15,7 +13,9 @@ This project Schedules a daily call of daily Weather data by calling a Weather A
 And then we visualize the data using Looker.
 
 
+Overall architecture :
 
+![Alt text2](images/dag_archit.jpeg)
 
 Project Contents
 ================
