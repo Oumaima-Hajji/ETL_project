@@ -3,14 +3,12 @@ import json
 import requests
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
-from airflow.operators.python import PythonOperator
-from airflow.operators.python import BranchPythonOperator
+from airflow.operators.python import BranchPythonOperator, PythonOperator
 from airflow.providers.google.cloud.operators.bigquery import \
     BigQueryCreateEmptyDatasetOperator
 from airflow.providers.google.cloud.transfers.gcs_to_bigquery import \
     GCSToBigQueryOperator
-from google.cloud import storage
-from google.cloud import bigquery
+from google.cloud import bigquery, storage
 from google.oauth2 import service_account
 from pendulum import datetime
 
@@ -21,7 +19,7 @@ def call_api():
     Input : None
     Output :  data (weather data in the form of a json)
     """
-    #url = "https://api.open-meteo.com/v1/forecast?latitude=48.85&longitude=2.35&hourly=rain,windspeed_80m,temperature_80m&daily=uv_index_max,precipitation_sum,rain_sum,snowfall_sum,precipitation_hours&forecast_days=16&start_date=2023-02-01&end_date=2023-06-14&timezone=GMT"
+   
     url = "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&hourly=temperature_2m,precipitation_probability,rain,snowfall,snow_depth,cloudcover,visibility,windspeed_10m,winddirection_10m,temperature_80m,soil_temperature_6cm,soil_temperature_18cm"
 
     response = requests.get(url=url)
@@ -44,7 +42,6 @@ def upload_json_to_gcs(bucket_name, file_name, json_data, key_file_path):
     print(f"Successfully uploaded {file_name} to {bucket_name}")
 
 
-
 def upload_json_to_gcs_bucket(dag_execution_date):
     """
     This function gives the upload_json_to_gcs function its arguments so it could be used in a python_callable parameter
@@ -60,19 +57,17 @@ def upload_json_to_gcs_bucket(dag_execution_date):
     upload_json_to_gcs(bucket_name, file_name, json_data, key_file_path)
 
 
-
 def check_data_already_exist(dag_execution_date):
-
-    '''
-    This function should check the table and sees if there is data or not (false , true) 
-    -> hourly.time
-
-    '''
-    client = bigquery.Client.from_service_account_json('plugins/credentials.json')
-
+    """
+    This function checkd the BigQuery table and sees if there is data or not according to the dag eecution date.
+    Input : dag_execution_date
+    Output : If table has data -> skipping task is executed
+            If table does not have data -> gcs_to_bigquery_operator task is executed
+    """
+    client = bigquery.Client.from_service_account_json("plugins/credentials.json")
 
     # Define your SQL query
-    sql_query = f'''
+    sql_query = f"""
         SELECT *
         FROM (
         SELECT TIMESTAMP_TRUNC(timestamp, HOUR) AS date_hour
@@ -80,22 +75,18 @@ def check_data_already_exist(dag_execution_date):
             UNNEST(hourly.time) AS timestamp
         )
         WHERE DATE(date_hour) = DATE('{dag_execution_date}')
-        '''
+        """
     # Execute the query
     query_job = client.query(sql_query)
 
     # Get the result
     result = query_job.result()
-  
+
     # Check if there is data or not
     if result.total_rows > 0:
-        return 'skipping'  # Data exists
+        return "skipping"  # Data exists
     else:
-        return 'gcs_to_bigquery_operator'  # No data
-
-    
-
-
+        return "gcs_to_bigquery_operator"  # No data
 
 
 with DAG(
@@ -128,19 +119,14 @@ with DAG(
         gcp_conn_id="gcs_connection",
     )
 
-    
     def check_result(ds):
         return check_data_already_exist(dag_execution_date=ds)
+
     check_if_data_already_exist = BranchPythonOperator(
-
-
-
         task_id="check_if_data_already_exist",
         python_callable=check_result,
-        do_xcom_push=False
-
+        do_xcom_push=False,
     )
-
 
     dag_execution_date = "{{ ds }}"
     bucket_name = "weather_data_oumaima"
@@ -169,7 +155,6 @@ with DAG(
     >> data_to_gcs
     >> create_dataset
     >> check_if_data_already_exist
-    >> [gcs_to_bigquery_operator  , skipping ] >> end
-    
-    
+    >> [gcs_to_bigquery_operator, skipping]
+    >> end
 )
