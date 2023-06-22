@@ -19,12 +19,23 @@ def call_api():
     Input : None
     Output :  data (weather data in the form of a json)
     """
-   
+    # url = "https://api.open-meteo.com/v1/forecast?latitude=48.85&longitude=2.35&hourly=rain,windspeed_80m,temperature_80m&daily=uv_index_max,precipitation_sum,rain_sum,snowfall_sum,precipitation_hours&forecast_days=16&start_date=2023-02-01&end_date=2023-06-14&timezone=GMT"
     url = "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&hourly=temperature_2m,precipitation_probability,rain,snowfall,snow_depth,cloudcover,visibility,windspeed_10m,winddirection_10m,temperature_80m,soil_temperature_6cm,soil_temperature_18cm"
 
     response = requests.get(url=url)
     data = response.json()
     return data
+
+
+def add_execution_date_to_data(data, dag_execution_date_time):
+    """
+    This function adds the dag_execution_date_time to the data so it could be used in the BigQuery table
+    Input : data (weather data in the form of a json) , dag_execution_date_time
+    Output : data with dag_execution_date_time added
+    """
+
+    new_data = {"dag_execution_date_time": f"{dag_execution_date_time}", **data}
+    return new_data
 
 
 def upload_json_to_gcs(bucket_name, file_name, json_data, key_file_path):
@@ -42,7 +53,7 @@ def upload_json_to_gcs(bucket_name, file_name, json_data, key_file_path):
     print(f"Successfully uploaded {file_name} to {bucket_name}")
 
 
-def upload_json_to_gcs_bucket(dag_execution_date):
+def upload_json_to_gcs_bucket(dag_execution_date, dag_execution_date_time):
     """
     This function gives the upload_json_to_gcs function its arguments so it could be used in a python_callable parameter
     Input : dag_execution_date is added to the file_name in order to get the date of the weather data file
@@ -50,7 +61,11 @@ def upload_json_to_gcs_bucket(dag_execution_date):
     """
     bucket_name = "weather_data_oumaima"
     file_name = f"weather_data_from_api_{dag_execution_date}.json"
-    json_data = call_api()
+    api_data = call_api()
+    print(api_data)
+    json_data = add_execution_date_to_data(
+        data=api_data, dag_execution_date_time=dag_execution_date_time
+    )
 
     key_file_path = "plugins/credentials.json"
 
@@ -62,7 +77,7 @@ def check_data_already_exist(dag_execution_date):
     This function checkd the BigQuery table and sees if there is data or not according to the dag eecution date.
     Input : dag_execution_date
     Output : If table has data -> skipping task is executed
-            If table does not have data -> gcs_to_bigquery_operator task is executed
+            If table does not have data -> gcs_to_bigquery task is executed
     """
     client = bigquery.Client.from_service_account_json("plugins/credentials.json")
 
@@ -86,30 +101,32 @@ def check_data_already_exist(dag_execution_date):
     if result.total_rows > 0:
         return "skipping"  # Data exists
     else:
-        return "gcs_to_bigquery_operator"  # No data
+        return "gcs_to_bigquery"  #No data
 
 
 with DAG(
     dag_id="daily_weather_update",
     start_date=datetime(2023, 1, 1),
-    schedule="@daily",  # cron
+    schedule="@daily",  # or cron
     max_active_runs=2,
     catchup=False,
 ) as dag:
     ds = "{{ ds }}"
+    ts = "{{ ts }}"
     begin = EmptyOperator(task_id="begin")
-
     call_api_json = PythonOperator(
         task_id="call_api",
         python_callable=call_api,
     )
 
-    def give_execution_date(ds):
-        return upload_json_to_gcs_bucket(dag_execution_date=ds)
+    def upload_data_to_json_with_execution_date(ds , ts):
+        return upload_json_to_gcs_bucket(
+            dag_execution_date=ds, dag_execution_date_time=ts
+        )
 
     data_to_gcs = PythonOperator(
         task_id="upload_data_to_gcs",
-        python_callable=give_execution_date,
+        python_callable=upload_data_to_json_with_execution_date,
     )
 
     create_dataset = BigQueryCreateEmptyDatasetOperator(
@@ -118,6 +135,12 @@ with DAG(
         project_id="liquid-virtue-382517",
         gcp_conn_id="gcs_connection",
     )
+
+    dag_execution_date = "{{ ds }}"
+    bucket_name = "weather_data_oumaima"
+    file_name = f"weather_data_from_api_{dag_execution_date}.json"
+    dataset_id = "daily_weather_data"
+    table_id = "daily_weather_data_table"
 
     def check_result(ds):
         return check_data_already_exist(dag_execution_date=ds)
@@ -128,22 +151,16 @@ with DAG(
         do_xcom_push=False,
     )
 
-    dag_execution_date = "{{ ds }}"
-    bucket_name = "weather_data_oumaima"
-    file_name = f"weather_data_from_api_{dag_execution_date}.json"
-    dataset_id = "daily_weather_data"
-    table_id = "daily_weather_data_table"
-
-    gcs_to_bigquery_operator = GCSToBigQueryOperator(
+    gcs_to_bigquery = GCSToBigQueryOperator(
         task_id="gcs_to_bigquery",
         bucket=bucket_name,
         source_objects=[file_name],
         destination_project_dataset_table=f"{dataset_id}.{table_id}",
         autodetect=True,
-        write_disposition="WRITE_TRUNCATE",
+        write_disposition="WRITE_TRUNCATE", 
         create_disposition="CREATE_IF_NEEDED",
         source_format="NEWLINE_DELIMITED_JSON",
-        gcp_conn_id="gcs_connection",
+        gcp_conn_id="gcs_connection",  # Connection made to Google Cloud through the Airflow UI connection page
     )
 
     skipping = EmptyOperator(task_id="skipping")
@@ -155,6 +172,7 @@ with DAG(
     >> data_to_gcs
     >> create_dataset
     >> check_if_data_already_exist
-    >> [gcs_to_bigquery_operator, skipping]
+    >> [gcs_to_bigquery, skipping]
     >> end
 )
+
