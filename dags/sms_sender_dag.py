@@ -9,6 +9,8 @@ from airflow.providers.google.cloud.operators.bigquery import (
 from airflow.providers.google.cloud.transfers.gcs_to_bigquery import (
     GCSToBigQueryOperator,
 )
+
+from airflow.providers.slack.operators.slack import SlackAPIPostOperator
 from google.cloud import bigquery, storage
 from google.oauth2 import service_account
 from pendulum import datetime
@@ -17,12 +19,11 @@ from schema import schema
 
 
 def call_people():
-    # specific keys : first_name, last_name , city, country , phone number, street, email, uuid (-> unNested fields)
-
+    
     """
     This function calls the People API and returns the data in a json format
     Input : None
-    Output :  data (people data in the form of a json)
+    Output :  Unnested data (people data in the form of a json) with ONLY specific keys : first_name, last_name , city, country , phone number, street, email, uuid (-> unNested fields)
     """
     url = "https://randomuser.me/api/"
 
@@ -80,10 +81,6 @@ def upload_data_to_gcs_bucket(dag_execution_date_time):
     bucket_name = "people_record"
     file_name = f"people_record_{dag_execution_date_time}.json"
     api_data = call_people()
-    # print(api_data)
-    # print(type(api_data))
-    # print(type(dag_execution_date_time))
-
     json_data = add_execution_date_to_data(
         data=api_data, dag_execution_date_time=dag_execution_date_time
     )
@@ -93,12 +90,81 @@ def upload_data_to_gcs_bucket(dag_execution_date_time):
     upload_data_to_gcs(bucket_name, file_name, json_data, key_file_path)
 
 
+def task_failure_alert(context):
+    task = context.get('task_instance').task_id
+    dag = context.get('task_instance').dag_id
+    exec_date=context.get('execution_date')
+    log_url=context.get('task_instance').log_url
+    picture_url = "https://pbs.twimg.com/media/EAmr-PAWsAEoiWR.jpg"
+
+    message = f"""
+    
+            :red_circle: DAG Failed : 
+            *Dag*: {dag} 
+            The task that failed is : 
+            *Task*: {task}  
+            *Execution Time*: {exec_date}  
+            *Log Url*: {log_url} 
+            *My honest to God reaction* : {picture_url}
+
+            """
+    
+    fail_alert = SlackAPIPostOperator(
+        task_id = "send_fail_alert_slack",
+        slack_conn_id="slack",
+        token = "PUT SLACK API TOKEN HERE",
+        icon_url = ":airflow:",
+        text=f"{message}",
+        username = "@AirflowDAGAlerts",
+        channel="#airflow-dag-monitoring",
+    )   
+
+    return fail_alert.execute(context=context)
+   
+
+
+def dag_success_alert(context):
+    task = context.get('task_instance').task_id
+    dag = context.get('task_instance').dag_id
+    exec_date=context.get('execution_date')
+    log_url=context.get('task_instance').log_url
+    gif_url = "https://media.tenor.com/bWUeVRqW9-IAAAAi/fast-cat-cat-excited.gif"
+
+    message = f"""
+    
+            :white_check_mark: DAG succeeded 
+            *Dag*: {dag} 
+            *Task*: {task}  
+            *Execution Time*: {exec_date}  
+            *Log Url*: {log_url} 
+            *My honest to God reaction* : {gif_url}
+
+            
+            """
+    success_alert = SlackAPIPostOperator(
+        task_id = "send_success_alert_slack",
+        slack_conn_id="slack",
+        token = "PUT SLACK API TOKEN HERE",
+        icon_url = ":airflow:",
+        text=f"{message}",
+        username = "@AirflowDAGAlerts",
+        channel="#airflow-dag-monitoring",
+        
+)
+    return success_alert.execute(context=context)
+
+
+
+
 with DAG(
     dag_id="sms_weather_notification",
     start_date=datetime(2023, 1, 1),
-    schedule="@daily",  # "*/5 * * * *",  # or cron
+    schedule= "@daily", #"*/5 * * * ,*",  # or cron
     max_active_runs=2,
     catchup=False,
+    on_success_callback=dag_success_alert,
+    on_failure_callback=task_failure_alert,
+
 ) as dag:
     ts = "{{ ts }}"
     begin = EmptyOperator(task_id="begin")
@@ -133,18 +199,20 @@ with DAG(
         bucket=bucket_name,
         source_objects=[file_name],
         destination_project_dataset_table=f"{dataset_id}.{table_id}",
-        # autodetect = True ##For first time use
-        schema_fields=schema,
-        write_disposition="WRITE_APPEND",  # WRITE_APPEND or "WRITE_TRUNCATE"
+        #autodetect = True, #For first time use
+        schema_fields=schema, #bq show --schema --format=prettyjson people_record_data.people_record_database_table
+        write_disposition="WRITE_APPEND", # WRITE_APPEND or "WRITE_TRUNCATE"
         create_disposition="CREATE_IF_NEEDED",
         source_format="NEWLINE_DELIMITED_JSON",
         gcp_conn_id="gcs_connection",  # Connection made to Google Cloud through the Airflow UI connection page
     )
 
     send_sms_notification = PythonOperator(
-        task_id="send_sms_notif",
+        task_id="send_sms_notification",
         python_callable=sms_sender,
     )
+
+
 
     end = EmptyOperator(task_id="end")
 
@@ -157,3 +225,4 @@ with DAG(
     >> send_sms_notification
     >> end
 )
+
