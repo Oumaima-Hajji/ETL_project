@@ -5,6 +5,8 @@
 ![Google Cloud](https://img.shields.io/badge/GoogleCloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white) ![Apache Airflow](https://img.shields.io/badge/Apache%20Airflow-017CEE?style=for-the-badge&logo=Apache%20Airflow&logoColor=white) ![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white) ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 
 [![SQL](https://img.icons8.com/color/48/000000/sql.png)](https://icons8.com/icon/13406/sql)[![API](https://img.icons8.com/color/48/000000/api-settings.png)](https://en.wikipedia.org/wiki/API)
+[![Slack](https://img.icons8.com/color/48/000000/slack-new.png)](https://icons8.com/icon/kikR2jIn6485/slack-new)
+
 
 **The DAGs :**
 
