@@ -32,6 +32,7 @@ This project has 2 parts :
 # Overall architecture :
 
 Daily weather : 
+
 ![Alt text2](images/dag_architecture.jpg)
 
 My resulting Dashboard in Looker :
